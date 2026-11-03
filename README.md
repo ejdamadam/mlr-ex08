@@ -11,7 +11,7 @@ Live on-device leaf classification running in the browser via WebAssembly (ONNX 
 This repository contains a lightweight single-page web application (`index.html`) that classifies leaves live from a mobile phone's rear camera or from uploaded photos.
 
 ### Architecture & Pipeline
-- **Model:** `leaf_model.onnx` (exported from PyTorch in Exercise 8, Task 2)
+- **Model:** `leaf_model.onnx` (Custom `LeafNetGAP` trained from scratch with Global Average Pooling, BatchNorm, and Color Augmentation — only ~240 KB)
 - **Runtime:** `onnxruntime-web` from CDN running locally in the browser via WebAssembly (WASM).
 - **Privacy:** 100% on-device processing. No video frames, photographs, or telemetry are transmitted to any external server.
 - **Classes:** `apple`, `cherry`, `chestnut`, `maple`.
@@ -31,10 +31,10 @@ The application implements the exact PyTorch preprocessing pipeline defined in t
 
 ## Verification Control (`check_image.jpg`)
 The application includes a built-in verification mechanism comparing predictions against `check_expected.json`:
-- **apple:** $0.2922$ (Expected: $0.2922$)
-- **cherry:** $0.0003$ (Expected: $0.0003$)
-- **chestnut:** $0.7075$ (Expected: $0.7075$)
-- **maple:** $0.0000$ (Expected: $0.0000$)
+- **apple:** $0.5696$ (Expected: $0.5696$)
+- **cherry:** $0.3906$ (Expected: $0.3906$)
+- **chestnut:** $0.0135$ (Expected: $0.0135$)
+- **maple:** $0.0264$ (Expected: $0.0264$)
 
 All probabilities match `check_expected.json` to 3+ decimal places.
 
