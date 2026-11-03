@@ -33,4 +33,4 @@ We measured accuracy on three validation sets:
 ## 4. Which model I put on the phone
 
 I deployed **Variant 7 (`LeafNetGAP` trained from scratch on combined dataset of 801 images from this year + last year)** into the web app.
-It has highest accuracy on both datasets (72.6% on our group and 84.2% on last year photos) and the exported `leaf_model.onnx` is only **240 KB** (compared to 6.35 MB for MobileNet), so it loads immediately in phone browser.
+It has highest accuracy on both datasets (72.6% on our group and 84.2% on last year photos) and the exported `leaf_model.onnx` is only **240 KB**.

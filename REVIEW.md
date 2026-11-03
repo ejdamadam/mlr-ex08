@@ -3,13 +3,15 @@
 Page URL: https://ejdamadam.github.io/mlr-ex08/
 
 ## 1. Running on phone
-I opened the GitHub Pages link on my iPhone in Safari. Camera started after clicking allow permission and it classify leaves in real time without going fullscreen (because `playsinline` is set on `<video>`).
+I opened the GitHub Pages link on my iPhone in Safari. Camera started after clicking allow permission and it classify leaves in real time.
 
+![Phone screenshot](phone_screenshot_3.png)
+![Phone screenshot](phone_screenshot_2.png)
 ![Phone screenshot](phone_screenshot.png)
-*(TODO: put screenshot filename here)*
+
 
 ## 2. Same numbers as notebook (`check_image.jpg`)
-I tested `check_image.jpg` in the web app and compared probabilites with `check_expected.json`.
+I tested `check_image.jpg` in the web app and compared probabilites with `check_expected.json`. That is also shown on screenshots above.
 
 For first exported MobileNet model from Task 2:
 - **apple:** page `0.2922` vs expected `0.29219`
@@ -23,10 +25,8 @@ For new custom model from Task 4 (currently deployed):
 - **chestnut:** page `0.0135` vs expected `0.01349`
 - **maple:** page `0.0264` vs expected `0.02637`
 
-Numbers agree to 3 decimal places (difference is only around 0.0001 because of canvas jpeg/pixel rounding in browser).
-
 ## 3. Preprocessing in `index.html`
-In `index.html` inside function `preprocess(source)` (around lines 677-725):
+In `index.html` inside function `preprocess(source)` (around lines 818-865):
 - **Crop and resize:** it takes `cropSize = Math.min(srcWidth, srcHeight)` and `startX = (srcWidth - cropSize) / 2`, `startY = (srcHeight - cropSize) / 2`. Then `offscreenCtx.drawImage(source, startX, startY, cropSize, cropSize, 0, 0, 96, 96)` crops center square and resizes it to 96x96.
 - **Scale and normalize:** inside loop over `96 * 96` pixels, RGB values from `imageData.data` are divided by `255.0` and standardized with `mean = [0.485, 0.456, 0.406]` and `std = [0.229, 0.224, 0.225]`.
 - **Channel order:** channels are saved into `Float32Array` as planar NCHW `[1, 3, 96, 96]` - first all Red pixels (`float32Data[i]`), then Green (`float32Data[numPixels + i]`), then Blue (`float32Data[2 * numPixels + i]`). This is exact same as `ToTensor()` and `Normalize()` in PyTorch notebook.
