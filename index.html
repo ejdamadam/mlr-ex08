@@ -205,6 +205,11 @@
             background: #16a34a;
         }
 
+        .btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
         /* Results Display */
         .results-header {
             display: flex;
@@ -317,6 +322,86 @@
 
         input[type="file"] {
             display: none;
+        }
+
+        /* Model Configuration & Optional Upload */
+        .model-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .model-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .model-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-badge {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .model-badge.custom {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+            border-color: rgba(56, 189, 248, 0.4);
+        }
+
+        .model-info-row {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            font-size: 0.8rem;
+            background: rgba(15, 23, 42, 0.4);
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .model-name-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .model-name {
+            color: #f1f5f9;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            word-break: break-all;
+        }
+
+        .model-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .model-hint {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            line-height: 1.35;
+        }
+
+        .model-hint code {
+            color: #38bdf8;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.75rem;
         }
 
         /* Verification Card */
@@ -483,6 +568,30 @@
         </div>
     </div>
 
+    <!-- Model Configuration & Optional Upload -->
+    <div class="card model-section">
+        <div class="model-header">
+            <span class="model-title">🧠 Model (ONNX)</span>
+            <span class="model-badge" id="model-badge">Default</span>
+        </div>
+        <div class="model-info-row">
+            <span class="model-name-label">Active:</span>
+            <span class="model-name" id="model-name">leaf_model.onnx (default)</span>
+        </div>
+        <div class="model-controls">
+            <label for="model-file-input" class="btn" style="flex: 1;">
+                <span>📦</span> Upload .onnx Model
+            </label>
+            <input type="file" id="model-file-input" accept=".onnx">
+            <button id="btn-reset-model" class="btn" style="flex: 1;" disabled>
+                <span>↺</span> Restore Default
+            </button>
+        </div>
+        <p class="model-hint">
+            Default: <code>leaf_model.onnx</code>. You can optionally upload another trained <code>.onnx</code> model to test it live.
+        </p>
+    </div>
+
     <!-- Photo Upload Fallback & check_image.jpg verification -->
     <div class="card upload-section">
         <span class="upload-label">Fallback: Classify photo or verify check_image.jpg</span>
@@ -493,6 +602,9 @@
             <input type="file" id="file-input" accept="image/*">
             <button id="btn-verify-check" class="btn">
                 <span>🧪</span> Test check_image
+            </button>
+            <button id="btn-clear-photo" class="btn" style="display: none;">
+                <span>✕</span> Clear Photo
             </button>
         </div>
 
@@ -567,6 +679,12 @@ const CHECK_EXPECTED = {
 // GitHub Pages target URL
 const GITHUB_PAGES_URL = "https://ejdamadam.github.io/mlr-ex08/";
 
+// Model state & defaults
+const DEFAULT_MODEL_PATH = './leaf_model.onnx';
+const DEFAULT_MODEL_LABEL = 'leaf_model.onnx (default)';
+let currentModelLabel = DEFAULT_MODEL_LABEL;
+let isCustomModel = false;
+
 // App state
 let session = null;
 let currentStream = null;
@@ -589,6 +707,7 @@ const cameraBtnText = document.getElementById('camera-btn-text');
 const btnFlip = document.getElementById('btn-flip');
 const fileInput = document.getElementById('file-input');
 const btnVerifyCheck = document.getElementById('btn-verify-check');
+const btnClearPhoto = document.getElementById('btn-clear-photo');
 const classesList = document.getElementById('classes-list');
 const perfInfo = document.getElementById('perf-info');
 const verificationBox = document.getElementById('verification-box');
@@ -596,6 +715,12 @@ const verificationTbody = document.getElementById('verification-tbody');
 const verifyStatusIcon = document.getElementById('verify-status-icon');
 const verifyStatusTitle = document.getElementById('verify-status-title');
 const pageLink = document.getElementById('page-link');
+
+// DOM elements for model section
+const modelBadge = document.getElementById('model-badge');
+const modelName = document.getElementById('model-name');
+const modelFileInput = document.getElementById('model-file-input');
+const btnResetModel = document.getElementById('btn-reset-model');
 
 /**
  * Update status badge UI
@@ -605,6 +730,22 @@ function setStatus(text, type = 'pending') {
     statusDot.className = 'status-dot';
     if (type === 'ready') statusDot.classList.add('ready');
     if (type === 'error') statusDot.classList.add('error');
+}
+
+/**
+ * Reset and clear all class predictions and winner highlights
+ * Ensures that when camera is turned off, no class is predicted.
+ */
+function clearPredictions() {
+    MODEL_INFO.classes.forEach(className => {
+        const valText = document.getElementById('val-' + className);
+        const barFill = document.getElementById('bar-' + className);
+        const row = document.getElementById('class-row-' + className);
+        if (valText) valText.textContent = '—';
+        if (barFill) barFill.style.width = '0%';
+        if (row) row.classList.remove('winner');
+    });
+    if (perfInfo) perfInfo.textContent = 'Inference: -- ms';
 }
 
 /**
@@ -619,7 +760,7 @@ function initClassList() {
         row.innerHTML = `
             <div class="class-info">
                 <span class="class-name">${className}</span>
-                <span class="class-numbers" id="val-${className}">0.0% (0.0000)</span>
+                <span class="class-numbers" id="val-${className}">—</span>
             </div>
             <div class="bar-container">
                 <div class="bar-fill" id="bar-${className}"></div>
@@ -685,11 +826,11 @@ function preprocess(source) {
     const startX = (srcWidth - cropSize) / 2;
     const startY = (srcHeight - cropSize) / 2;
 
-    const targetSize = MODEL_INFO.input_size; // 96
+    const targetSize = MODEL_INFO.input_size || 96;
     offscreenCanvas.width = targetSize;
     offscreenCanvas.height = targetSize;
 
-    // 2. Resize to 96x96
+    // 2. Resize to input size
     offscreenCtx.drawImage(
         source,
         startX, startY, cropSize, cropSize,
@@ -701,22 +842,19 @@ function preprocess(source) {
     const rgba = imageData.data;
     const numPixels = targetSize * targetSize;
 
-    // 4. Construct Float32Array in NCHW format (1 x 3 x 96 x 96)
-    // Channel 0: Red, Channel 1: Green, Channel 2: Blue
+    // 4. Construct Float32Array in NCHW format (1 x 3 x H x W)
     const float32Data = new Float32Array(3 * numPixels);
-    const [meanR, meanG, meanB] = MODEL_INFO.mean;
-    const [stdR, stdG, stdB] = MODEL_INFO.std;
+    const [meanR, meanG, meanB] = MODEL_INFO.mean || [0.485, 0.456, 0.406];
+    const [stdR, stdG, stdB] = MODEL_INFO.std || [0.229, 0.224, 0.225];
 
     for (let i = 0; i < numPixels; i++) {
-        // Scale RGB pixels from [0, 255] to [0, 1]
         const r = rgba[i * 4] / 255.0;
         const g = rgba[i * 4 + 1] / 255.0;
         const b = rgba[i * 4 + 2] / 255.0;
 
-        // Standardize each channel: (pixel - mean) / std
-        float32Data[i] = (r - meanR) / stdR;                    // Red channel: [0 .. numPixels - 1]
-        float32Data[numPixels + i] = (g - meanG) / stdG;        // Green channel: [numPixels .. 2*numPixels - 1]
-        float32Data[2 * numPixels + i] = (b - meanB) / stdB;    // Blue channel: [2*numPixels .. 3*numPixels - 1]
+        float32Data[i] = (r - meanR) / stdR;
+        float32Data[numPixels + i] = (g - meanG) / stdG;
+        float32Data[2 * numPixels + i] = (b - meanB) / stdB;
     }
 
     return new ort.Tensor('float32', float32Data, [1, 3, targetSize, targetSize]);
@@ -759,6 +897,13 @@ async function runInference(source) {
     const results = await session.run(feeds);
     const outputTensor = results[session.outputNames[0]];
     const logits = Array.from(outputTensor.data);
+
+    // If output dimensions differ from current class list, adjust dynamically
+    if (logits.length !== MODEL_INFO.classes.length) {
+        MODEL_INFO.classes = Array.from({ length: logits.length }, (_, i) => `Class ${i}`);
+        initClassList();
+    }
+
     const probabilities = softmax(logits);
     const elapsed = (performance.now() - tStart).toFixed(1);
 
@@ -811,6 +956,11 @@ async function startCamera() {
         video.srcObject = currentStream;
         video.style.display = 'block';
         previewImage.style.display = 'none';
+        previewImage.removeAttribute('src');
+        if (btnClearPhoto) btnClearPhoto.style.display = 'none';
+
+        // Clear predictions until the first live frame is processed
+        clearPredictions();
 
         await video.play();
         isCameraRunning = true;
@@ -825,14 +975,16 @@ async function startCamera() {
         isCameraRunning = false;
         cameraBtnText.textContent = 'Start Camera';
         btnCamera.classList.add('btn-primary');
+        clearPredictions();
         setStatus('Camera permission denied or unavailable. Use photo upload below.', 'error');
     }
 }
 
 /**
  * Stop camera stream
+ * When camera is turned off, no class is predicted.
  */
-function stopCamera() {
+function stopCamera(clearPreview = true) {
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
@@ -841,17 +993,150 @@ function stopCamera() {
         currentStream.getTracks().forEach(t => t.stop());
         currentStream = null;
     }
+    video.srcObject = null;
     isCameraRunning = false;
     cameraBtnText.textContent = 'Start Camera';
     btnCamera.classList.add('btn-primary');
-    setStatus('Camera paused', 'ready');
+    setStatus('Camera turned off', 'ready');
+
+    if (clearPreview) {
+        previewImage.style.display = 'none';
+        previewImage.removeAttribute('src');
+        if (btnClearPhoto) btnClearPhoto.style.display = 'none';
+        clearPredictions();
+    }
 }
 
 /**
- * Load model_info.json and ONNX model
+ * Safely extract embedded model_info JSON from an ONNX ArrayBuffer if present
+ */
+function tryExtractModelInfo(arrayBuffer) {
+    try {
+        const text = new TextDecoder('utf-8', { fatal: false }).decode(arrayBuffer);
+        const idx = text.indexOf('{"classes"');
+        if (idx !== -1) {
+            let depth = 0;
+            let endIdx = idx;
+            for (let i = idx; i < text.length && i < idx + 2000; i++) {
+                if (text[i] === '{') depth++;
+                else if (text[i] === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        endIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+            const jsonStr = text.slice(idx, endIdx);
+            const parsed = JSON.parse(jsonStr);
+            if (parsed && Array.isArray(parsed.classes) && parsed.classes.length > 0) {
+                return parsed;
+            }
+        }
+    } catch (e) {
+        console.warn('Could not extract embedded model_info:', e);
+    }
+    return null;
+}
+
+/**
+ * Load default ONNX model (leaf_model.onnx)
+ */
+async function loadDefaultModel() {
+    setStatus('Loading default leaf_model.onnx...', 'pending');
+    try {
+        // Try to fetch updated model_info.json
+        try {
+            const infoRes = await fetch('./model_info.json');
+            if (infoRes.ok) {
+                MODEL_INFO = await infoRes.json();
+            }
+        } catch (e) {
+            console.log('Using default MODEL_INFO:', e);
+        }
+
+        const newSession = await ort.InferenceSession.create(DEFAULT_MODEL_PATH, {
+            executionProviders: ['wasm']
+        });
+
+        session = newSession;
+        isCustomModel = false;
+        currentModelLabel = DEFAULT_MODEL_LABEL;
+
+        modelBadge.textContent = 'Default';
+        modelBadge.classList.remove('custom');
+        modelName.textContent = currentModelLabel;
+        btnResetModel.disabled = true;
+
+        initClassList();
+        setStatus('Default model ready (leaf_model.onnx)', 'ready');
+
+        // If a photo is currently shown, re-run inference on it; otherwise clear predictions
+        if (!isCameraRunning && previewImage.style.display !== 'none' && previewImage.src) {
+            await runInference(previewImage);
+        } else if (!isCameraRunning) {
+            clearPredictions();
+        }
+        return true;
+    } catch (err) {
+        console.error('Failed to load default ONNX model:', err);
+        setStatus('Failed to load leaf_model.onnx: ' + err.message, 'error');
+        return false;
+    }
+}
+
+/**
+ * Load optional custom ONNX model from uploaded file
+ */
+async function loadCustomModel(file) {
+    if (!file) return;
+    setStatus(`Loading custom model: ${file.name}...`, 'pending');
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const embeddedInfo = tryExtractModelInfo(arrayBuffer);
+
+        const newSession = await ort.InferenceSession.create(arrayBuffer, {
+            executionProviders: ['wasm']
+        });
+
+        session = newSession;
+        isCustomModel = true;
+
+        if (embeddedInfo) {
+            MODEL_INFO = embeddedInfo;
+        }
+
+        const sizeKb = (file.size / 1024).toFixed(1);
+        currentModelLabel = `${file.name} (${sizeKb} KB)`;
+
+        modelBadge.textContent = 'Custom';
+        modelBadge.classList.add('custom');
+        modelName.textContent = currentModelLabel;
+        btnResetModel.disabled = false;
+
+        initClassList();
+        setStatus(`Loaded custom model: ${file.name}`, 'ready');
+
+        // If a photo is currently shown, re-run inference on it; otherwise clear predictions
+        if (!isCameraRunning && previewImage.style.display !== 'none' && previewImage.src) {
+            await runInference(previewImage);
+        } else if (!isCameraRunning) {
+            clearPredictions();
+        }
+    } catch (err) {
+        console.error('Failed to load custom ONNX model:', err);
+        setStatus(`Error loading ${file.name}: ${err.message}`, 'error');
+        alert(`Failed to load "${file.name}" as an ONNX model.\n\nError: ${err.message}\n\nKeeping current model.`);
+    }
+}
+
+/**
+ * Initialize application
  */
 async function initApp() {
     initClassList();
+    clearPredictions();
 
     // Determine deployment URL
     const currentUrl = (window.location.protocol.startsWith('http'))
@@ -878,34 +1163,19 @@ async function initApp() {
         console.warn('QR code generation warning:', qrErr);
     }
 
-    // Try to fetch updated model_info.json if available
-    try {
-        const infoRes = await fetch('./model_info.json');
-        if (infoRes.ok) {
-            MODEL_INFO = await infoRes.json();
-            initClassList();
-        }
-    } catch (e) {
-        console.log('Using embedded model_info default:', e);
-    }
-
-    // Configure ONNX Runtime Web
+    // Configure ONNX Runtime Web and load default model
     try {
         ort.env.wasm.numThreads = 1; // Single-threaded for maximum compatibility on iOS Safari & Pages
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 
-        setStatus('Loading leaf_model.onnx...', 'pending');
-        session = await ort.InferenceSession.create('./leaf_model.onnx', {
-            executionProviders: ['wasm']
-        });
-
-        setStatus('Model ready! Starting camera...', 'ready');
-
-        // Automatically start camera
-        startCamera();
+        const ok = await loadDefaultModel();
+        if (ok) {
+            setStatus('Model ready! Starting camera...', 'ready');
+            startCamera();
+        }
     } catch (err) {
-        console.error('Failed to load ONNX model:', err);
-        setStatus('Failed to load leaf_model.onnx: ' + err.message, 'error');
+        console.error('Failed to initialize ONNX Runtime Web:', err);
+        setStatus('Failed to initialize ONNX Runtime: ' + err.message, 'error');
     }
 }
 
@@ -916,13 +1186,15 @@ fileInput.addEventListener('change', async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
-    stopCamera();
+    // Stop camera but don't clear preview, since we are showing the photo
+    stopCamera(false);
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
         previewImage.src = evt.target.result;
         previewImage.style.display = 'block';
         video.style.display = 'none';
+        if (btnClearPhoto) btnClearPhoto.style.display = 'inline-flex';
 
         previewImage.onload = async () => {
             const probs = await runInference(previewImage);
@@ -942,7 +1214,7 @@ fileInput.addEventListener('change', async (e) => {
  */
 async function verifyWithCheckImage() {
     setStatus('Testing check_image.jpg...', 'pending');
-    stopCamera();
+    stopCamera(false);
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -952,6 +1224,7 @@ async function verifyWithCheckImage() {
         previewImage.src = img.src;
         previewImage.style.display = 'block';
         video.style.display = 'none';
+        if (btnClearPhoto) btnClearPhoto.style.display = 'inline-flex';
 
         const probs = await runInference(img);
         if (probs) {
@@ -999,7 +1272,7 @@ function verifyPredictions(probs) {
 // Button listeners
 btnCamera.addEventListener('click', () => {
     if (isCameraRunning) {
-        stopCamera();
+        stopCamera(true);
     } else {
         startCamera();
     }
@@ -1013,6 +1286,31 @@ btnFlip.addEventListener('click', () => {
 });
 
 btnVerifyCheck.addEventListener('click', verifyWithCheckImage);
+
+if (btnClearPhoto) {
+    btnClearPhoto.addEventListener('click', () => {
+        previewImage.style.display = 'none';
+        previewImage.removeAttribute('src');
+        fileInput.value = '';
+        btnClearPhoto.style.display = 'none';
+        verificationBox.classList.remove('active');
+        clearPredictions();
+        setStatus('Photo cleared', 'ready');
+    });
+}
+
+// Optional Model Upload listeners
+modelFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    await loadCustomModel(file);
+    modelFileInput.value = '';
+});
+
+btnResetModel.addEventListener('click', async () => {
+    await loadDefaultModel();
+    modelFileInput.value = '';
+});
 
 // Start on load
 window.addEventListener('DOMContentLoaded', initApp);
